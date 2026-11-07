@@ -1,0 +1,7 @@
+package-as: TrikksReskin
+
+move-folders:
+  TrikksReskin/TrikksReskin: TrikksReskin
+
+ignore:
+  - README.md
