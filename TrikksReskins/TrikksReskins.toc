@@ -1,5 +1,5 @@
 ## Interface: 16001, 120105
-## Title: Trikks Reskin
+## Title: Trikks Reskins
 ## IconTexture: Interface\AddOns\TrikksTweaks\media\minimap
 ## Notes: Flat, minimalist reskin of Blizzard's windows and clean square action buttons. Settings in /trikks.
 ## Version: 1.0

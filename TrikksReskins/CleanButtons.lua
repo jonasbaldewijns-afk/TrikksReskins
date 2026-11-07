@@ -8,12 +8,12 @@
 --   * rounded atlases for the pushed / highlight / checked states, plus slot art
 -- We remove the masks, hide the frame and slot art, and swap the state
 -- textures for flat squares.
--- Part of TrikksReskin: uses Trikks Tweaks' core (hub, UI kit, module system).
+-- Part of TrikksReskins: uses Trikks Tweaks' core (hub, UI kit, module system).
 local TT = TrikksTweaks
 local M = TT:RegisterModule("CleanButtons", {
     title = "Clean Action Buttons",
     category = "Reskin",
-    addon = "TrikksReskin", svName = "TrikksReskinDB",
+    addon = "TrikksReskins", svName = "TrikksReskinDB",
     desc = "Square, cropped action bar icons with a thin border instead of Blizzard's rounded bronze buttons.",
     defaults = { crop = true, border = 1, hideArt = true, hideMacroText = false, hideHotkeys = false },
 })

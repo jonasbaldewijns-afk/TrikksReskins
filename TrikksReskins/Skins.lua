@@ -9,7 +9,7 @@
 -- Blizzard re-showing them doesn't matter) and draw our flat style instead.
 -- Windows with special parts (like the character window) get a few extra rules.
 -- Skins can't be "un-applied", so switching them off needs a reload.
--- Part of TrikksReskin: uses Trikks Tweaks' core (hub, UI kit, module system).
+-- Part of TrikksReskins: uses Trikks Tweaks' core (hub, UI kit, module system).
 local TT = TrikksTweaks
 local C = TT.C
 
@@ -54,7 +54,7 @@ for _, w in ipairs(WINDOWS) do defaults.windows[w[1]] = true end
 local M = TT:RegisterModule("Skins", {
     title = "Skins",
     category = "Reskin",
-    addon = "TrikksReskin", svName = "TrikksReskinDB",
+    addon = "TrikksReskins", svName = "TrikksReskinDB",
     desc = "Reskins Blizzard's windows (character, spellbook, mail, merchant, ...) in the Trikks Tweaks style.",
     defaults = defaults,
 })
