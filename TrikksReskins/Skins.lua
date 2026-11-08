@@ -979,6 +979,18 @@ local function SkinTrackerHeader(h)
     if not h or extraSkinned[h] then return end
     extraSkinned[h] = true
     S.Kill(h.Background)
+    -- the red collapse square, the filter button and their red hover glow:
+    -- grey (stays grey when Blizzard swaps collapse / expand)
+    for _, b in ipairs({ h:GetChildren() }) do
+        if b:IsObjectType("Button") then
+            for _, r in ipairs({ b:GetRegions() }) do
+                if r:IsObjectType("Texture") then
+                    r:SetDesaturated(true)
+                    if r:GetDrawLayer() ~= "HIGHLIGHT" then r:SetVertexColor(0.85, 0.85, 0.88) end
+                end
+            end
+        end
+    end
     local line = h:CreateTexture(nil, "ARTWORK")
     line:SetPoint("BOTTOMLEFT", 0, 1); line:SetPoint("BOTTOMRIGHT", 0, 1)
     line:SetHeight(1)
