@@ -1106,6 +1106,16 @@ local function SkinPopups()
             S.Kill(p.NineSlice); S.Kill(p.Border); S.Kill(p.BG)
             S.Panel(p, C.bg, Border(), true)
             S.ButtonsIn(p)
+            -- the answer buttons have their own template (a red plate made of
+            -- plain textures, no Left/Right pieces): skin them by name
+            local bc = p.ButtonContainer
+            for _, b in ipairs({ bc and bc.Button1, bc and bc.Button2, bc and bc.Button3, bc and bc.Button4,
+                                 p.ExtraButton, _G["StaticPopup" .. i .. "Button1"], _G["StaticPopup" .. i .. "Button2"] }) do
+                if b and M.db.buttons then
+                    S.Button(b, true)
+                    if b.SetNormalFontObject then b:SetNormalFontObject("GameFontHighlight") end
+                end
+            end
         end
     end
 end
