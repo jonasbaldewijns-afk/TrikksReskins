@@ -232,7 +232,12 @@ function S.Deep(frame, depth)
         if r:IsObjectType("Texture") and r.GetAtlas then
             local atlas = r:GetAtlas()
             if TT.IsSecret(atlas) then atlas = nil end
-            if atlas == "common-sidetab-selected" then
+            if (not atlas or atlas == "") and not r.ttTinted and S.IsMinusPlus(r) then
+                -- red square with a gold sign -> grey (stays grey when Blizzard swaps - and +)
+                r.ttTinted = true
+                r:SetDesaturated(true)
+                r:SetVertexColor(0.85, 0.85, 0.88)
+            elseif atlas == "common-sidetab-selected" then
                 if not r.ttTinted then
                     r.ttTinted = true
                     local a = Accent()
@@ -427,33 +432,44 @@ function S.Button(btn, all)
     btn:HookScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(Border())) end)
 end
 
--- The red plate as plain file textures (no pieces, no atlas): pop-up buttons,
--- old panel buttons. Modern clients report textures by file number, so ask
--- the game once which numbers these files have.
-local RED_FILES = {
-    "Interface\\Buttons\\UI-DialogBox-Button-Up", "Interface\\Buttons\\UI-DialogBox-Button-Down",
-    "Interface\\Buttons\\UI-DialogBox-Button-Disabled", "Interface\\Buttons\\UI-Panel-Button-Up",
-    "Interface\\Buttons\\UI-Panel-Button-Down", "Interface\\Buttons\\UI-Panel-Button-Disabled",
-    "Interface\\Buttons\\UI-Panel-Button-Disabled-Down",
-}
-local redPlate
-local function IsRedPlate(t)
-    if not t then return false end
-    if not redPlate then
-        redPlate = {}
-        local probe = UIParent:CreateTexture()
-        for _, path in ipairs(RED_FILES) do
-            redPlate[path:lower()] = true
-            probe:SetTexture(path)
-            local id = probe:GetTexture()
-            if id then redPlate[id] = true end
-        end
-        probe:SetTexture(nil)
+-- Plain file textures (no atlas, no named pieces) that are still Blizzard
+-- art. Modern clients report textures by file number, so the game is asked
+-- once which numbers these files have.
+local probe
+local function FileSet(paths)
+    local set = {}
+    probe = probe or UIParent:CreateTexture()
+    for _, path in ipairs(paths) do
+        set[path:lower()] = true
+        probe:SetTexture(path)
+        local id = probe:GetTexture()
+        if id then set[id] = true end
     end
-    local tex = t:GetTexture()
+    probe:SetTexture(nil)
+    return set
+end
+local function InSet(set, t)
+    local tex = t and t.GetTexture and t:GetTexture()
     if tex == nil or TT.IsSecret(tex) then return false end
     if type(tex) == "string" then tex = tex:lower() end
-    return redPlate[tex] or false
+    return set[tex] or false
+end
+local B = "Interface\\Buttons\\"
+-- the red plate: pop-up buttons, old panel buttons
+local redPlate
+local function IsRedPlate(t)
+    redPlate = redPlate or FileSet({ B .. "UI-DialogBox-Button-Up", B .. "UI-DialogBox-Button-Down",
+        B .. "UI-DialogBox-Button-Disabled", B .. "UI-Panel-Button-Up", B .. "UI-Panel-Button-Down",
+        B .. "UI-Panel-Button-Disabled", B .. "UI-Panel-Button-Disabled-Down" })
+    return InSet(redPlate, t)
+end
+-- the old red squares with a gold - / + (collapsible lists)
+local minusPlus
+function S.IsMinusPlus(t)
+    minusPlus = minusPlus or FileSet({ B .. "UI-MinusButton-Up", B .. "UI-MinusButton-Down", B .. "UI-MinusButton-Disabled",
+        B .. "UI-PlusButton-Up", B .. "UI-PlusButton-Down", B .. "UI-PlusButton-Disabled", B .. "UI-PlusButton-Hilight",
+        B .. "UI-MinusButton-Hilight", B .. "UI-PlusMinus-Buttons" })
+    return InSet(minusPlus, t)
 end
 
 local function IsArtButton(b)
