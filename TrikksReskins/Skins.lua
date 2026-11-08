@@ -47,9 +47,39 @@ local WINDOWS = {
     { "tabard",    "Tabard designer",       "TabardFrame" },
     { "timemanager","Clock / stopwatch",    "TimeManagerFrame", "Blizzard_TimeManager" },
     { "guildbank", "Guild bank",            "GuildBankFrame", "Blizzard_GuildBankUI" },
+    -- 1.1: one checkbox can cover several frames (a list of names)
+    { "bags",      "Bags",                  "BAGS" },
+    { "flyout",    "Equipment flyout",      "EquipmentFlyoutFrame" },
+    { "achieve",   "Achievements",          "AchievementFrame" },
+    { "calendar",  "Calendar",              "CalendarFrame" },
+    { "journal",   "Adventure guide",       "EncounterJournal" },
+    { "transmog",  "Transmog",              { "TransmogFrame", "WardrobeFrame" } },
+    { "socket",    "Socketing",             "ItemSocketingFrame" },
+    { "upgrade",   "Item upgrade",          "ItemUpgradeFrame" },
+    { "scrap",     "Scrapping",             "ScrappingMachineFrame" },
+    { "blackmarket","Black market",         "BlackMarketFrame" },
+    { "weekly",    "Weekly rewards",        "WeeklyRewardsFrame" },
+    { "guildctrl", "Guild control",         "GuildControlUI" },
+    { "petition",  "Petition / guild registrar", { "PetitionFrame", "GuildRegistrarFrame" } },
+    { "raidinfo",  "Raid info",             "RaidInfoFrame" },
+    { "loothist",  "Loot history",          "GroupLootHistoryFrame" },
+    { "lootroll",  "Loot rolls",            { "GroupLootFrame1", "GroupLootFrame2", "GroupLootFrame3", "GroupLootFrame4" } },
+    { "settings",  "Options (Esc > Options)", "SettingsPanel" },
+    { "chatcfg",   "Chat settings",         "ChatConfigFrame" },
+    { "colour",    "Colour picker",         "ColorPickerFrame" },
+    { "help",      "Help / support",        "HelpFrame" },
+    { "mirror",    "Breath / fatigue timers", "MirrorTimerContainer" },
 }
+-- the bag windows: the combined bag and every separate one
+local BAGS = { "ContainerFrameCombinedBags" }
+for i = 1, 13 do BAGS[#BAGS + 1] = "ContainerFrame" .. i end
+local function FrameNames(w)
+    if w[3] == "BAGS" then return BAGS end
+    if type(w[3]) == "table" then return w[3] end
+    return { w[3] }
+end
 
-local defaults = { buttons = true, tooltips = true, popups = true, style = "grey", lightText = true, bars = true, windows = {} }
+local defaults = { buttons = true, tooltips = true, popups = true, style = "grey", lightText = true, bars = true, menus = false, cdm = true, windows = {} }
 for _, w in ipairs(WINDOWS) do defaults.windows[w[1]] = true end
 local M = TT:RegisterModule("Skins", {
     title = "Skins",
@@ -570,6 +600,52 @@ EXTRA.GossipFrame = function()
     if GossipFrame.Update then hooksecurefunc(GossipFrame, "Update", function() C_Timer.After(0, QuestText) end) end
 end
 
+-- bags: every slot square with a quality edge (slots are made / refilled in UpdateItems)
+local function SkinBagItems(frame)
+    if type(frame.EnumerateValidItems) ~= "function" then return end
+    for _, b in frame:EnumerateValidItems() do S.ItemButton(b) end
+end
+local function BagExtra(frame)
+    if type(frame.UpdateItems) == "function" then hooksecurefunc(frame, "UpdateItems", SkinBagItems) end
+    SkinBagItems(frame)
+end
+for _, n in ipairs(BAGS) do EXTRA[n] = BagExtra end
+
+-- frames that get only their own rule, no window panel
+local NOPANEL = { EquipmentFlyoutFrame = true, MirrorTimerContainer = true }
+
+-- the "pick another item for this slot" popup on the character window
+EXTRA.EquipmentFlyoutFrame = function(f)
+    local bf = f.buttonFrame
+    if bf then
+        for _, r in ipairs({ bf:GetRegions() }) do if r:IsObjectType("Texture") then S.Kill(r) end end
+        S.Kill(bf.NineSlice)
+        S.Panel(bf, C.bg, Border())
+    end
+    if type(EquipmentFlyout_DisplayButton) == "function" then
+        hooksecurefunc("EquipmentFlyout_DisplayButton", function(button) S.ItemButton(button) end)
+    end
+end
+
+-- breath / fatigue / feign death bars: drop the cast-bar frame art, flat edge
+EXTRA.MirrorTimerContainer = function(f)
+    local function SkinTimer(t)
+        if t.ttSkinned or not t.StatusBar then return end
+        t.ttSkinned = true
+        S.Kill(t.Border); S.Kill(t.TextBorder)
+        for _, r in ipairs({ t:GetRegions() }) do
+            if r:IsObjectType("Texture") then S.Kill(r) end
+        end
+        for _, r in ipairs({ t.StatusBar:GetRegions() }) do
+            if r:IsObjectType("Texture") and r ~= t.StatusBar:GetStatusBarTexture() then S.Kill(r) end
+        end
+        TT.Flat(t.StatusBar, { 0, 0, 0, 0.5 }, Border())
+    end
+    local function All() for _, t in ipairs({ f:GetChildren() }) do SkinTimer(t) end end
+    if type(f.SetupTimer) == "function" then hooksecurefunc(f, "SetupTimer", All) end
+    All()
+end
+
 EXTRA.InspectFrame = function()
     for _, slot in ipairs(GEAR) do S.ItemButton(_G["Inspect" .. slot .. "Slot"]) end
     if type(InspectPaperDollItemSlotButton_Update) == "function" then
@@ -640,22 +716,119 @@ local function SkinPopups()
     end
 end
 
+-- Dropdown menus (Blizzard's menu system, 11.0+): hide the menu's own
+-- background art and put a flat panel behind it. Our panel is a separate child
+-- frame, so nothing is written into Blizzard's menu frame itself.
+local function SkinMenu(menu)
+    if not menu or menu.ttMenu then return end
+    menu.ttMenu = true
+    for _, r in ipairs({ menu:GetRegions() }) do
+        if r:IsObjectType("Texture") then
+            local a = r.GetAtlas and r:GetAtlas()
+            if a and not TT.IsSecret(a) and a:find("dropdown") and a:find("bg") then S.Kill(r) end
+        end
+    end
+    local bg = CreateFrame("Frame", nil, menu, "BackdropTemplate")
+    bg:SetPoint("TOPLEFT", 2, -2); bg:SetPoint("BOTTOMRIGHT", -2, 2)
+    bg:SetFrameLevel(math.max(0, menu:GetFrameLevel() - 1))
+    S.Panel(bg, C.bg, Border(), false)
+end
+local function HookMenus()
+    if not (Menu and Menu.GetManager) then return end
+    local manager = Menu.GetManager()
+    if not manager or manager.ttHooked then return end
+    manager.ttHooked = true
+    local function Latest()
+        C_Timer.After(0, function()
+            local m = manager.GetOpenMenu and manager:GetOpenMenu()
+            if m then SkinMenu(m) end
+        end)
+    end
+    for _, fn in ipairs({ "OpenMenu", "OpenContextMenu" }) do
+        if type(manager[fn]) == "function" then hooksecurefunc(manager, fn, Latest) end
+    end
+end
+
+-- Blizzard's Cooldown Manager icons (Essential, Utility, Tracked Buffs): square
+-- cropped icon with a 1px edge, like Clean Action Buttons. Only the look
+-- changes: the rounded mask and the overlay ring go, our edge is a separate
+-- child frame. Timers, visibility and everything secret stay Blizzard's. The
+-- hooks only schedule the work for the next frame (never run inside Blizzard's code).
+local CDM_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }
+local SQUARE = "Interface\\Buttons\\WHITE8x8"
+local function FlatCDMIcon(item)
+    if item.ttFlat or not item.Icon then return end
+    item.ttFlat = true
+    local icon = item.Icon
+    for _, r in ipairs({ item:GetRegions() }) do
+        if r:IsObjectType("MaskTexture") then
+            pcall(icon.RemoveMaskTexture, icon, r)
+        elseif r:IsObjectType("Texture") and r ~= icon then
+            local a = r.GetAtlas and r:GetAtlas()
+            if a and not TT.IsSecret(a) and a:find("IconOverlay") then S.Kill(r) end
+        end
+    end
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local edge = CreateFrame("Frame", nil, item, "BackdropTemplate")
+    edge:SetPoint("TOPLEFT", icon, -1, 1); edge:SetPoint("BOTTOMRIGHT", icon, 1, -1)
+    edge:SetFrameLevel(math.max(0, item:GetFrameLevel() - 1))
+    TT.Flat(edge, { 0, 0, 0, 1 }, { 0, 0, 0, 1 })
+    if item.Cooldown and item.Cooldown.SetSwipeTexture then
+        pcall(item.Cooldown.SetSwipeTexture, item.Cooldown, SQUARE)
+    end
+end
+local cdmPending = false
+local function FlatCDMAll()
+    cdmPending = false
+    for _, n in ipairs(CDM_VIEWERS) do
+        local v = _G[n]
+        if v and v.itemFramePool then
+            for item in v.itemFramePool:EnumerateActive() do FlatCDMIcon(item) end
+        end
+    end
+end
+local function QueueCDM()
+    if cdmPending then return end
+    cdmPending = true
+    C_Timer.After(0, FlatCDMAll)
+end
+local function HookCDM()
+    for _, n in ipairs(CDM_VIEWERS) do
+        local v = _G[n]
+        if v and not v.ttCDMHooked and type(v.RefreshLayout) == "function" then
+            v.ttCDMHooked = true
+            hooksecurefunc(v, "RefreshLayout", QueueCDM)
+        end
+    end
+    QueueCDM()
+end
+
 ---------------------------------------------------------------------------
 -- Applying
 ---------------------------------------------------------------------------
 local function SkinWindow(w)
     if not M.db.windows[w[1]] then return end
-    local frame = _G[w[3]]
-    if not frame or frame.ttSkinned then return end
-    local ok, err = pcall(S.Window, frame)
-    if ok and EXTRA[w[3]] then ok, err = pcall(EXTRA[w[3]]) end
-    if not ok then geterrorhandler()("Trikks Tweaks skin " .. w[3] .. ": " .. tostring(err)) end
+    for _, name in ipairs(FrameNames(w)) do
+        local frame = _G[name]
+        if frame and not frame.ttSkinned then
+            local ok, err = true, nil
+            if NOPANEL[name] then
+                frame.ttSkinned = true
+            else
+                ok, err = pcall(S.Window, frame)
+            end
+            if ok and EXTRA[name] then ok, err = pcall(EXTRA[name], frame) end
+            if not ok then geterrorhandler()("Trikks Reskins skin " .. name .. ": " .. tostring(err)) end
+        end
+    end
 end
 
 local function ApplyAll()
     if not M.enabled or AuroraRunning() then return end
     for _, w in ipairs(WINDOWS) do SkinWindow(w) end
     if M.db.popups then SkinPopups() end
+    if M.db.menus then HookMenus() end
+    if M.db.cdm then HookCDM() end
 end
 
 local ev = CreateFrame("Frame")
@@ -674,8 +847,12 @@ ev:SetScript("OnEvent", function(_, event, addon)
             end
         end
     else
-        -- a load-on-demand window just loaded (auction house, talents, ...)
-        for _, w in ipairs(WINDOWS) do if w[4] == addon then SkinWindow(w) end end
+        -- a load-on-demand window may have just loaded (auction house, talents,
+        -- calendar, ...): try every window that isn't skinned yet (cheap: done
+        -- and missing ones are skipped), so we don't depend on addon names
+        for _, w in ipairs(WINDOWS) do SkinWindow(w) end
+        if M.db.menus then HookMenus() end
+        if M.db.cdm then HookCDM() end
         -- it may have added a page to a window that is already open
         -- (Blizzard_TokenUI -> currency list in the character window)
         if IsLoggedIn() then
@@ -723,7 +900,9 @@ function M:BuildSettings(body, page)
     Check(db, "tooltips", "Flat tooltips"); y = y + 24
     Check(db, "popups", "Flat pop-up dialogs"); y = y + 24
     Check(db, "bars", "Flat progress bars and list headers (reputation, skills, ...)"); y = y + 24
-    Check(db, "lightText", "Make dark text light (for windows that had parchment behind them)"); y = y + 28
+    Check(db, "lightText", "Make dark text light (for windows that had parchment behind them)"); y = y + 24
+    Check(db, "menus", "Flat dropdown menus (experimental: turn off if a menu option stops working)"); y = y + 24
+    Check(db, "cdm", "Flat Cooldown Manager icons (square, thin edge)"); y = y + 28
     local sl = TT.Label(body, "Borders & accent lines:")
     sl:SetPoint("TOPLEFT", 2, -y - 4)
     local styleBtn = TT.Cycle(body, 120, { { "grey", "Dark grey" }, { "black", "Black" }, { "green", "Green" } },
