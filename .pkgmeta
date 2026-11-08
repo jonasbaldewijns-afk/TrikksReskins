@@ -5,3 +5,7 @@ move-folders:
 
 ignore:
   - README.md
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
