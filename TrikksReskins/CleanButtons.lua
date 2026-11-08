@@ -36,6 +36,21 @@ local function FlatState(tex, icon, r, g, b, a)
     tex:SetAllPoints(icon)
 end
 
+-- Blizzard places the cooldown layers 3px inside the icon (1.7px on small
+-- bars) because its rounded border covered that rim. On our square icons the
+-- rim stayed bright while the rest greyed out: stretch them over the whole icon.
+local COOLDOWNS = { "cooldown", "lossOfControlCooldown", "chargeCooldown" }
+local function FitCooldowns(btn, icon)
+    for _, key in ipairs(COOLDOWNS) do
+        local cd = btn[key]
+        if cd then
+            cd:ClearAllPoints()
+            cd:SetAllPoints(icon)
+        end
+    end
+end
+
+local pending
 local function StyleButton(btn, name)
     local db = M.db
     local icon = btn.icon or btn.Icon or _G[name .. "Icon"]
@@ -67,7 +82,15 @@ local function StyleButton(btn, name)
         btn.ttBorder = CreateFrame("Frame", nil, btn, "BackdropTemplate")
         btn.ttBorder:SetAllPoints(icon)
         btn.ttBorder:SetFrameLevel(btn:GetFrameLevel() + 1)
+        -- Blizzard re-insets the cooldowns when the button art updates (e.g. bar
+        -- size changed in Edit Mode): put ours back right after
+        if type(btn.UpdateButtonArt) == "function" then
+            hooksecurefunc(btn, "UpdateButtonArt", function()
+                if InCombatLockdown() then pending = true else FitCooldowns(btn, icon) end
+            end)
+        end
     end
+    FitCooldowns(btn, icon)
 
     -- settings that can change live
     if db.crop then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) else icon:SetTexCoord(0, 1, 0, 1) end
@@ -94,7 +117,6 @@ local function StyleBarArt()
     end
 end
 
-local pending
 local function Apply()
     if not M.enabled then return end
     -- Action buttons are secure: only restyle them out of combat.
