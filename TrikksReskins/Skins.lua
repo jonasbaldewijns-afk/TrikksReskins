@@ -239,9 +239,17 @@ function S.Deep(frame, depth)
                     r:SetDesaturated(true)
                     r:SetVertexColor(a[1], a[2], a[3], 0.8)
                 end
-            elseif atlas and not TT.IsSecret(atlas) and atlas:find("Options_ListExpand") then
+            elseif atlas and (atlas:find("Options_ListExpand") or atlas == "common-button-list-collapseExpand") then
                 S.Kill(r)               -- the brown/gold header plate of collapsible lists
                 S.Header(frame)
+            elseif atlas == "common-button-list-minus" or atlas == "common-button-list-plus" then
+                if not r.ttTinted then  -- the +/- on those headers: light grey instead of gold
+                    r.ttTinted = true
+                    r:SetDesaturated(true)
+                    r:SetVertexColor(0.75, 0.75, 0.78)
+                end
+            elseif atlas == "checkbox-minimal" and frame:IsObjectType("CheckButton") then
+                S.Check(frame)
             elseif IsChrome(atlas) then
                 S.Kill(r)
             end
@@ -279,6 +287,31 @@ function S.Header(btn)
         btn:HookScript("OnEnter", function(self) self:SetBackdropBorderColor(unpack(Accent())) end)
         btn:HookScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(Border())) end)
     end
+end
+
+-- Blizzard's newer checkboxes ("checkbox-minimal"): the same box as the hub's
+-- own: dark 14px square, 1px edge (accent on hover), a filled accent square
+-- when ticked. The box is a child frame behind the button, so the button
+-- itself keeps working exactly as Blizzard made it.
+function S.Check(cb)
+    if cb.ttCheck then return end
+    cb.ttCheck = true
+    S.Kill(cb:GetNormalTexture()); S.Kill(cb:GetPushedTexture()); S.Kill(cb:GetHighlightTexture())
+    local box = CreateFrame("Frame", nil, cb, "BackdropTemplate")
+    box:SetSize(14, 14)
+    box:SetPoint("CENTER")
+    box:SetFrameLevel(math.max(0, cb:GetFrameLevel() - 1))
+    TT.Flat(box, { 0.04, 0.04, 0.05, 1 }, Border())
+    local fill = cb:CreateTexture(nil, "OVERLAY")
+    fill:SetPoint("TOPLEFT", box, 3, -3); fill:SetPoint("BOTTOMRIGHT", box, -3, 3)
+    fill:SetColorTexture(unpack(Accent()))
+    cb:SetCheckedTexture(fill)
+    local dim = cb:CreateTexture(nil, "OVERLAY")
+    dim:SetAllPoints(fill)
+    dim:SetColorTexture(0.4, 0.4, 0.42, 1)
+    cb:SetDisabledCheckedTexture(dim)
+    cb:HookScript("OnEnter", function() box:SetBackdropBorderColor(unpack(Accent())) end)
+    cb:HookScript("OnLeave", function() box:SetBackdropBorderColor(unpack(Border())) end)
 end
 
 -- Progress bars (reputation, skills, ...): drop the bevelled border pieces and
