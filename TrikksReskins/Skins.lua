@@ -71,6 +71,7 @@ local WINDOWS = {
     { "mirror",    "Breath / fatigue timers", "MirrorTimerContainer" },
     -- 1.1: chat tabs and edit box (the chat background stays yours to set)
     { "chat",      "Chat (tabs, edit box)", "ChatFrame1" },
+    { "xpbar",     "XP / reputation bars",  "StatusTrackingBarManager" },
 }
 -- the bag windows: the combined bag and every separate one
 local BAGS = { "ContainerFrameCombinedBags" }
@@ -696,12 +697,12 @@ local function FlatBehind(parent, l, t, r, b)
     bg:SetFrameLevel(math.max(0, parent:GetFrameLevel() - 1))
     return bg
 end
-local chatSkinned = {}
+local extraSkinned = {}
 local function SkinChatFrame(name)
-    if chatSkinned[name] then return end
+    if extraSkinned[name] then return end
     local cf = _G[name]
     if not cf then return end
-    chatSkinned[name] = true
+    extraSkinned[name] = true
 
     local tab = _G[name .. "Tab"]
     if tab then
@@ -717,7 +718,7 @@ local function SkinChatFrame(name)
         bar:SetHeight(2)
         bar:SetColorTexture(unpack(Accent()))
         bar:SetShown(tab.ActiveMiddle and tab.ActiveMiddle:IsShown() or false)
-        chatSkinned[tab] = bar
+        extraSkinned[tab] = bar
         -- the "new message" glow: our accent colour instead of gold
         if tab.glow then tab.glow:SetVertexColor(unpack(Accent())) end
     end
@@ -746,7 +747,7 @@ EXTRA.ChatFrame1 = function()
     -- selected tab: Blizzard shows / hides its (now invisible) "active" art here
     if type(FCFTab_UpdateColors) == "function" then
         hooksecurefunc("FCFTab_UpdateColors", function(tab, selected)
-            local bar = chatSkinned[tab]
+            local bar = extraSkinned[tab]
             if bar then bar:SetShown(selected and true or false) end
         end)
     end
@@ -754,6 +755,33 @@ EXTRA.ChatFrame1 = function()
     if type(FCF_OpenTemporaryWindow) == "function" then
         hooksecurefunc("FCF_OpenTemporaryWindow", function() C_Timer.After(0, SkinAllChat) end)
     end
+end
+
+-- XP / reputation / honor bars at the bottom of the screen: the frame around
+-- them and their background go, a flat dark panel with a 1px edge goes behind
+-- each bar. The fills stay Blizzard's (they carry the colours: XP, rested,
+-- reputation level, ...). Panels are child frames of the bars, nothing is
+-- written into Blizzard's bar code.
+NOPANEL.StatusTrackingBarManager = true
+EXTRA.StatusTrackingBarManager = function(mgr)
+    local function SkinBar(bar)
+        local sb = bar and bar.StatusBar
+        if not sb or extraSkinned[sb] then return end
+        extraSkinned[sb] = true
+        S.Kill(sb.Background); S.Kill(sb.Underlay)
+        local bg = FlatBehind(sb, -1, 1, 1, -1)
+        TT.Flat(bg, { 0, 0, 0, 0.55 }, Border())
+    end
+    local function All()
+        if Defer(All, mgr) then return end
+        for _, c in ipairs(mgr.barContainers or { MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
+            if c then
+                S.Kill(c.BarFrameTexture)
+                for _, bar in pairs(c.bars or {}) do SkinBar(bar) end
+            end
+        end
+    end
+    All()
 end
 
 EXTRA.InspectFrame = function()
