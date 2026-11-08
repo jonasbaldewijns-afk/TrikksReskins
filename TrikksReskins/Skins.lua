@@ -73,6 +73,7 @@ local WINDOWS = {
     { "chat",      "Chat (tabs, edit box)", "ChatFrame1" },
     { "xpbar",     "XP / reputation bars",  "StatusTrackingBarManager" },
     { "tracker",   "Quest tracker",         "ObjectiveTrackerFrame" },
+    { "worldmap",  "World map + quest log", "WorldMapFrame" },
 }
 -- the bag windows: the combined bag and every separate one
 local BAGS = { "ContainerFrameCombinedBags" }
@@ -180,6 +181,7 @@ local CHROME = {
     "^UIFrameBackground%-NineSlice",
     "^Professions%-QualityPane%-",  -- quality pane plates and dividers
     "^Professions%-Equipment%-Divider",
+    "^QuestLog%-frame",             -- quest log borders, filigree and dividers (map side panel)
 }
 -- On top of that list: anything whose atlas name says it is a background
 -- ("...Background...", "...-BG", "...StoneBG3", "Parchment") is decoration and
@@ -869,6 +871,78 @@ EXTRA.ObjectiveTrackerFrame = function(f)
     for _, fn in ipairs({ "AddModule", "Update" }) do
         if type(f[fn]) == "function" then hooksecurefunc(f, fn, Later) end
     end
+end
+
+-- World map + quest log (one window on this client). The map canvas itself is
+-- never walked (hundreds of pins, their labels and buttons): only the frame,
+-- the breadcrumb bar and the quest log side get skinned.
+-- The breadcrumb bar's art is plain textures without atlas names: everything
+-- but the hover layer goes there, and a flat strip goes behind it.
+local function SkinNavBar(bar)
+    if not bar then return end
+    local function Strip(f)
+        for _, r in ipairs({ f:GetRegions() }) do
+            if r:IsObjectType("Texture") then
+                if r:GetDrawLayer() == "HIGHLIGHT" then
+                    if not extraSkinned[r] then extraSkinned[r] = true; r:SetColorTexture(1, 1, 1, 0.08) end
+                else
+                    S.Kill(r)
+                end
+            elseif r:IsObjectType("FontString") then
+                S.LightText(r)
+            end
+        end
+    end
+    Strip(bar)
+    if bar.overlay then Strip(bar.overlay) end
+    for _, b in ipairs({ bar:GetChildren() }) do
+        -- the crumb buttons (not the dropdown arrows inside them, those stay)
+        if b:IsObjectType("Button") then Strip(b) end
+    end
+    if not extraSkinned[bar] then
+        extraSkinned[bar] = true
+        TT.Flat(FlatBehind(bar, 0, 0, 0, 0), C.panel, Border())
+    end
+end
+NOPANEL.WorldMapFrame = true
+EXTRA.WorldMapFrame = function(f)
+    -- flat panel behind the whole window (the map draws on top of it)
+    S.Panel(FlatBehind(f, 0, 0, 0, 0), C.bg, Border(), true)
+    local bf = f.BorderFrame
+    if bf then
+        S.Kill(bf.NineSlice); S.Kill(bf.PortraitContainer); S.Kill(bf.InsetBorderTop)
+        S.Kill(bf.Bg); S.Kill(bf.TitleBg)
+        local title = bf.TitleContainer and bf.TitleContainer.TitleText
+        if title then title:SetTextColor(unpack(C.text)) end
+        S.Close(bf.CloseButton or WorldMapFrameCloseButton)
+    end
+    local nav = f.navBar or f.NavBar
+    SkinNavBar(nav)
+    if type(NavBar_AddButton) == "function" then
+        hooksecurefunc("NavBar_AddButton", function(bar) if bar == nav then C_Timer.After(0, function() SkinNavBar(nav) end) end end)
+    end
+
+    -- quest log side
+    local q = QuestMapFrame
+    if not q then return end
+    local pending = false
+    local function QuestLog()
+        pending = false
+        if not q:IsShown() then return end
+        S.Deep(q)
+        S.ButtonsIn(q)
+    end
+    local function Later()
+        if pending then return end
+        pending = true
+        C_Timer.After(0, QuestLog)
+    end
+    q:HookScript("OnShow", Later)
+    for _, fn in ipairs({ "QuestLogQuests_Update", "QuestMapFrame_ShowQuestDetails", "QuestMapFrame_ReturnFromQuestDetails" }) do
+        if type(_G[fn]) == "function" then hooksecurefunc(fn, Later) end
+    end
+    if q.SetDisplayMode then hooksecurefunc(q, "SetDisplayMode", Later) end
+    Later()
 end
 
 EXTRA.InspectFrame = function()
