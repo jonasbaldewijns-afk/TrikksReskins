@@ -427,9 +427,39 @@ function S.Button(btn, all)
     btn:HookScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(Border())) end)
 end
 
+-- The red plate as plain file textures (no pieces, no atlas): pop-up buttons,
+-- old panel buttons. Modern clients report textures by file number, so ask
+-- the game once which numbers these files have.
+local RED_FILES = {
+    "Interface\\Buttons\\UI-DialogBox-Button-Up", "Interface\\Buttons\\UI-DialogBox-Button-Down",
+    "Interface\\Buttons\\UI-DialogBox-Button-Disabled", "Interface\\Buttons\\UI-Panel-Button-Up",
+    "Interface\\Buttons\\UI-Panel-Button-Down", "Interface\\Buttons\\UI-Panel-Button-Disabled",
+    "Interface\\Buttons\\UI-Panel-Button-Disabled-Down",
+}
+local redPlate
+local function IsRedPlate(t)
+    if not t then return false end
+    if not redPlate then
+        redPlate = {}
+        local probe = UIParent:CreateTexture()
+        for _, path in ipairs(RED_FILES) do
+            redPlate[path:lower()] = true
+            probe:SetTexture(path)
+            local id = probe:GetTexture()
+            if id then redPlate[id] = true end
+        end
+        probe:SetTexture(nil)
+    end
+    local tex = t:GetTexture()
+    if tex == nil or TT.IsSecret(tex) then return false end
+    if type(tex) == "string" then tex = tex:lower() end
+    return redPlate[tex] or false
+end
+
 local function IsArtButton(b)
     if not b:IsObjectType("Button") or b:IsObjectType("CheckButton") then return false end
     if b.Left and b.Right and (b.Middle or b.Center) then return true end
+    if IsRedPlate(b:GetNormalTexture()) then return true end
     local a = AtlasOf(b.StateTexture)
     return a and a:find("^common%-button") and true or false
 end
