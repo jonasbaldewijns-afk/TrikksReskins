@@ -72,6 +72,7 @@ local WINDOWS = {
     -- 1.1: chat tabs and edit box (the chat background stays yours to set)
     { "chat",      "Chat (tabs, edit box)", "ChatFrame1" },
     { "xpbar",     "XP / reputation bars",  "StatusTrackingBarManager" },
+    { "tracker",   "Quest tracker",         "ObjectiveTrackerFrame" },
 }
 -- the bag windows: the combined bag and every separate one
 local BAGS = { "ContainerFrameCombinedBags" }
@@ -828,10 +829,46 @@ EXTRA.StatusTrackingBarManager = function(mgr)
             if c then
                 S.Kill(c.BarFrameTexture)
                 for _, bar in pairs(c.bars or {}) do SkinBar(bar) end
+                -- the small divider ticks across the bar (every 5%)
+                for _, child in ipairs({ c:GetChildren() }) do S.Kill(child.BarDividerTexture) end
             end
         end
     end
     All()
+end
+
+-- Quest tracker (objectives on screen): the gold header plates go, a thin
+-- accent line sits under each header instead. The background behind the whole
+-- tracker is Edit Mode's own "background opacity" setting and stays yours.
+-- Sections (quests, campaign, achievements, ...) can be added later, so new
+-- headers are looked for after every tracker update (each one only once).
+local function SkinTrackerHeader(h)
+    if not h or extraSkinned[h] then return end
+    extraSkinned[h] = true
+    S.Kill(h.Background)
+    local line = h:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("BOTTOMLEFT", 0, 1); line:SetPoint("BOTTOMRIGHT", 0, 1)
+    line:SetHeight(1)
+    line:SetColorTexture(unpack(Accent()))
+end
+local function SkinTracker()
+    local f = ObjectiveTrackerFrame
+    if not f then return end
+    SkinTrackerHeader(f.Header)
+    for _, m in ipairs(f.modules or {}) do SkinTrackerHeader(m.Header) end
+end
+NOPANEL.ObjectiveTrackerFrame = true
+EXTRA.ObjectiveTrackerFrame = function(f)
+    SkinTracker()
+    local pending = false
+    local function Later()
+        if pending then return end
+        pending = true
+        C_Timer.After(0, function() pending = false; SkinTracker() end)
+    end
+    for _, fn in ipairs({ "AddModule", "Update" }) do
+        if type(f[fn]) == "function" then hooksecurefunc(f, fn, Later) end
+    end
 end
 
 EXTRA.InspectFrame = function()
