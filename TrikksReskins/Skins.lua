@@ -250,6 +250,10 @@ function S.Deep(frame, depth)
                 end
             elseif atlas == "checkbox-minimal" and frame:IsObjectType("CheckButton") then
                 S.Check(frame)
+            elseif atlas == "common-stat-bar-BG" then
+                S.StatBar(frame, r)
+            elseif atlas and atlas:find("^!?minimal%-scrollbar%-") then
+                S.ScrollPart(frame, r, atlas)
             elseif IsChrome(atlas) then
                 S.Kill(r)
             end
@@ -659,6 +663,54 @@ local function FlatBehind(parent, l, t, r, b)
 end
 local extraSkinned = {}
 
+-- Stat bars in lists (skills, reputation, ...: Blizzard's "common-stat-bar"):
+-- the brown bevelled background and the rounded mask on the fill go, a flat
+-- dark strip with a 1px edge goes behind the fill. The fill colour (blue
+-- skills, reputation standing) stays: it carries meaning. The strip is sized
+-- from the fill's own height and the bar's fill area, so it hugs the fill.
+function S.StatBar(bar, bg)
+    if extraSkinned[bar] or not M.db.bars then return end
+    extraSkinned[bar] = true
+    bar.ttSkinned = true            -- the generic progress-bar rule leaves it alone then
+    S.Kill(bg)
+    local fill = bar.Fill
+    if fill and bar.Mask and fill.RemoveMaskTexture then pcall(fill.RemoveMaskTexture, fill, bar.Mask) end
+    local area = bar.FillArea or bar
+    local strip = FlatBehind(bar, 0, 0, 0, 0)
+    strip:ClearAllPoints()
+    strip:SetPoint("LEFT", area, "LEFT", -1, 0)
+    strip:SetPoint("RIGHT", area, "RIGHT", 1, 0)
+    if fill then
+        strip:SetPoint("TOP", fill, "TOP", 0, 1)
+        strip:SetPoint("BOTTOM", fill, "BOTTOM", 0, -1)
+    else
+        strip:SetPoint("TOP", bar, "TOP", 0, -5)
+        strip:SetPoint("BOTTOM", bar, "BOTTOM", 0, 5)
+    end
+    TT.Flat(strip, { 0, 0, 0, 0.55 }, Border())
+end
+
+-- Blizzard's thin scroll bars ("minimal-scrollbar-..."): flat dark track,
+-- flat grey thumb, grey arrows. Called for each piece as the window is walked.
+function S.ScrollPart(frame, r, atlas)
+    if atlas:find("arrow") then
+        if not r.ttTinted then
+            r.ttTinted = true
+            r:SetDesaturated(true)
+            r:SetVertexColor(0.7, 0.7, 0.73)
+        end
+        return
+    end
+    S.Kill(r)
+    if extraSkinned[frame] then return end
+    extraSkinned[frame] = true
+    if atlas:find("thumb") then
+        TT.Flat(FlatBehind(frame, 0, 0, 0, 0), { 0.35, 0.35, 0.38, 1 }, { 0.35, 0.35, 0.38, 1 })
+    else
+        TT.Flat(FlatBehind(frame, 1, 0, -1, 0), { 0, 0, 0, 0.35 }, { 0, 0, 0, 0 })
+    end
+end
+
 -- The professions book (Forever: a page of this window, "BookPage"): one card
 -- per profession. The card art (brown box + illustration, one atlas:
 -- "Profession-overview-Card-...") goes, a flat panel goes behind instead; the
@@ -989,6 +1041,13 @@ EXTRA.InspectFrame = function()
 end
 
 EXTRA.CharacterFrame = function()
+    -- Forever's "open / close the side pane" button: gold arrow square -> grey
+    local tog = _G.CharacterFrameRightPaneToggleButton
+    if tog then
+        for _, r in ipairs({ tog:GetRegions() }) do
+            if r:IsObjectType("Texture") and r:GetDrawLayer() ~= "HIGHLIGHT" then r:SetDesaturated(true) end
+        end
+    end
     -- the painted background behind your character model and its inner border
     for _, corner in ipairs({ "TopLeft", "TopRight", "BotLeft", "BotRight" }) do
         S.Kill(_G["CharacterModelFrameBackground" .. corner])
