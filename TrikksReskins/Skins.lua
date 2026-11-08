@@ -809,6 +809,17 @@ local function FlatCDMIcon(item)
         end
     end
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    -- Blizzard draws the icon bigger than its slot and trims it round with the
+    -- mask; without the mask the square would spill into the next icon. Fit the
+    -- icon (and its swipe) inside the slot, 1px in, so the edge fits too and
+    -- the gaps between icons are Blizzard's own "Padding" setting.
+    icon:ClearAllPoints()
+    icon:SetPoint("TOPLEFT", item, "TOPLEFT", 1, -1)
+    icon:SetPoint("BOTTOMRIGHT", item, "BOTTOMRIGHT", -1, 1)
+    if item.Cooldown then
+        item.Cooldown:ClearAllPoints()
+        item.Cooldown:SetAllPoints(icon)
+    end
     -- the 1px edge is a plain black texture 1px bigger than the icon, behind it.
     -- (Not a backdrop: a backdrop recalculates in Lua whenever the size
     -- changes, and these icons' sizes are secret in combat -> Lua error.)
