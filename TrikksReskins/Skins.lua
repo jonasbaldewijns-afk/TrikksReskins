@@ -613,9 +613,66 @@ end
 
 -- Professions: pages (crafting, specializations, orders) are built when you
 -- first switch to them, and the art changes per profession: look again then.
+-- A flat panel as a separate child frame behind something (so nothing is
+-- mixed into Blizzard's own frame), and a set of things already done.
+local function FlatBehind(parent, l, t, r, b)
+    local bg = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    bg:SetPoint("TOPLEFT", l, t); bg:SetPoint("BOTTOMRIGHT", r, b)
+    bg:SetFrameLevel(math.max(0, parent:GetFrameLevel() - 1))
+    return bg
+end
+local extraSkinned = {}
+
+-- The professions book (Forever: a page of this window, "BookPage"): one card
+-- per profession. The card art (brown box + illustration, one atlas:
+-- "Profession-overview-Card-...") goes, a flat panel goes behind instead; the
+-- skill bars lose their frame and background; the spell buttons get a square
+-- 1px edge; the red crossmark becomes a small flat "x". Spell buttons are
+-- secure, so our edges are separate child frames, nothing is mixed into them.
+local CARDS = { "PrimaryProfession1", "PrimaryProfession2",
+                "SecondaryProfession1", "SecondaryProfession2", "SecondaryProfession3" }
+local function SkinCard(card)
+    if extraSkinned[card] then return end
+    extraSkinned[card] = true
+    S.Kill(card.Background)
+    TT.Flat(FlatBehind(card, 0, 0, 0, 0), { 1, 1, 1, 0.03 }, Border())
+    local bar = card.StatusBar
+    if bar then
+        S.Kill(bar.Background); S.Kill(bar.Border)
+        TT.Flat(FlatBehind(bar, -1, 1, 1, -1), { 0, 0, 0, 0.55 }, Border())
+    end
+    for i = 1, 4 do
+        local b = card["SpellButton" .. i]
+        if b then
+            S.Kill(b.IconBorder)
+            TT.Flat(FlatBehind(b, -1, 1, 1, -1), { 0.03, 0.03, 0.04, 1 }, { 0, 0, 0, 1 })
+        end
+    end
+    local un = card.UnlearnButton
+    if un then
+        S.Kill(un.Icon); S.Kill(un.NormalTexture)
+        local x = un:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        x:SetPoint("CENTER", 0, 1)
+        x:SetText("x")
+        x:SetTextColor(unpack(C.dim))
+        un:HookScript("OnEnter", function() x:SetTextColor(1, 0.35, 0.35) end)
+        un:HookScript("OnLeave", function() x:SetTextColor(unpack(C.dim)) end)
+    end
+end
+local function SkinBookPage()
+    local page = ProfessionsFrame and ProfessionsFrame.BookPage
+    local content = page and page.ProfessionsContentFrame
+    if not content then return end
+    if Defer(SkinBookPage, "book") then return end
+    for _, k in ipairs(CARDS) do
+        if content[k] then SkinCard(content[k]) end
+    end
+end
+
 EXTRA.ProfessionsFrame = function()
     local f = ProfessionsFrame
-    local function Again() C_Timer.After(0, f.ttReskin) end
+    local function Again() C_Timer.After(0, f.ttReskin); C_Timer.After(0, SkinBookPage) end
+    SkinBookPage()
     for _, fn in ipairs({ "SetTab", "Refresh", "SetProfessionInfo" }) do
         if type(f[fn]) == "function" then hooksecurefunc(f, fn, Again) end
     end
@@ -691,13 +748,6 @@ end
 -- setting in the chat window's own options. Our panels are separate child
 -- frames behind Blizzard's, so nothing is mixed into the chat frames: the edit
 -- box sends secure commands (/cast, ...) and stays free of addon code.
-local function FlatBehind(parent, l, t, r, b)
-    local bg = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    bg:SetPoint("TOPLEFT", l, t); bg:SetPoint("BOTTOMRIGHT", r, b)
-    bg:SetFrameLevel(math.max(0, parent:GetFrameLevel() - 1))
-    return bg
-end
-local extraSkinned = {}
 local function SkinChatFrame(name)
     if extraSkinned[name] then return end
     local cf = _G[name]
