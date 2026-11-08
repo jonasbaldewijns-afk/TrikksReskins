@@ -100,6 +100,34 @@ end
 local S = {}
 TT.Skin = S                          -- other modules can use it too
 
+-- In combat the client protects some frames and turns sizes, colours and
+-- texture names into "secret" values; skinning then causes Lua errors (e.g.
+-- a backdrop doing maths on a secret width). So skin work that would run
+-- during combat is remembered (each thing once) and done when combat ends.
+local deferred, deferredSet = {}, {}
+-- Blizzard tables (mixins, managers) we already hooked: kept here, never as a
+-- field on their table (see the stats list below for why)
+local hookedTables = {}
+local function Defer(fn, obj)
+    if not InCombatLockdown() then return false end
+    deferredSet[fn] = deferredSet[fn] or {}
+    if not deferredSet[fn][obj] then
+        deferredSet[fn][obj] = true
+        deferred[#deferred + 1] = { fn, obj }
+    end
+    return true
+end
+local combatEv = CreateFrame("Frame")
+combatEv:RegisterEvent("PLAYER_REGEN_ENABLED")
+combatEv:SetScript("OnEvent", function()
+    local list = deferred
+    deferred, deferredSet = {}, {}
+    for _, d in ipairs(list) do
+        local ok, err = pcall(d[1], d[2])
+        if not ok then geterrorhandler()("Trikks Reskins: " .. tostring(err)) end
+    end
+end)
+
 -- Border / accent colours. "accent" is the thin line on top of windows, the
 -- bar under the selected tab and the selected side tab; "border" is the 1px edge.
 local STYLES = {
@@ -192,10 +220,12 @@ end
 -- Walk a window and everything inside it; hide chrome, tint the selected side tab.
 function S.Deep(frame, depth)
     depth = depth or 0
+    if depth == 0 and Defer(S.Deep, frame) then return end
     if depth > 10 or (frame.IsForbidden and frame:IsForbidden()) then return end
     for _, r in ipairs({ frame:GetRegions() }) do
         if r:IsObjectType("Texture") and r.GetAtlas then
             local atlas = r:GetAtlas()
+            if TT.IsSecret(atlas) then atlas = nil end
             if atlas == "common-sidetab-selected" then
                 if not r.ttTinted then
                     r.ttTinted = true
@@ -277,6 +307,7 @@ function S.StatusBar(bar)
     -- SetStatusBarColor, so a plain white texture keeps that colour, flat.
     -- Atlas fills have the colour painted in: those stay as they are.
     local atlas = fill.GetAtlas and fill:GetAtlas()
+    if TT.IsSecret(atlas) then atlas = "?" end                -- can't tell: leave the fill alone
     if not atlas or atlas == "" then
         local r, g, b, a = bar:GetStatusBarColor()
         bar:SetStatusBarTexture(WHITE)
@@ -363,6 +394,7 @@ end
 -- walk a window's children and restyle Blizzard buttons in it
 function S.ButtonsIn(frame, depth)
     depth = depth or 0
+    if depth == 0 and Defer(S.ButtonsIn, frame) then return end
     if depth > 5 or not M.db.buttons then return end
     for _, child in ipairs({ frame:GetChildren() }) do
         if not (child.IsForbidden and child:IsForbidden()) then
@@ -467,6 +499,7 @@ function S.SetQualityBorder(btn, quality)
 end
 function S.ItemButton(btn)
     if not btn or btn.ttSkinned then return end
+    if Defer(S.ItemButton, btn) then return end
     btn.ttSkinned = true
     local name = btn:GetName()
     local icon = btn.icon or btn.Icon or (name and _G[name .. "IconTexture"])
@@ -542,6 +575,7 @@ function S.Window(frame)
     -- some windows create their buttons / tabs / panels only when first opened:
     -- look again each time the window opens (already-done parts are skipped)
     local function Again()
+        if Defer(frame.ttReskin, frame) then return end
         S.Tabs(frame)
         S.ButtonsIn(frame)
         S.Deep(frame)
@@ -641,7 +675,10 @@ EXTRA.MirrorTimerContainer = function(f)
         end
         TT.Flat(t.StatusBar, { 0, 0, 0, 0.5 }, Border())
     end
-    local function All() for _, t in ipairs({ f:GetChildren() }) do SkinTimer(t) end end
+    local function All()
+        if Defer(All, f) then return end                            -- breath bars can start mid-fight
+        for _, t in ipairs({ f:GetChildren() }) do SkinTimer(t) end
+    end
     if type(f.SetupTimer) == "function" then hooksecurefunc(f, "SetupTimer", All) end
     All()
 end
@@ -683,8 +720,11 @@ EXTRA.CharacterFrame = function()
         end
     end
     for _, mixin in ipairs({ CharacterStatFrameCategoryScrollBoxElementMixin, CharacterStatFrameScrollBoxBaseElementMixin }) do
-        if mixin and mixin.Init and not mixin.ttHooked then
-            mixin.ttHooked = true
+        -- remember hooked mixins in OUR table: a flag written into Blizzard's mixin
+        -- would be copied into every row Blizzard builds, and reading our value
+        -- taints Blizzard's code -> "secret value ... tainted by TrikksReskins"
+        if mixin and mixin.Init and not hookedTables[mixin] then
+            hookedTables[mixin] = true
             hooksecurefunc(mixin, "Init", FlatRow)
         end
     end
@@ -736,12 +776,12 @@ end
 local function HookMenus()
     if not (Menu and Menu.GetManager) then return end
     local manager = Menu.GetManager()
-    if not manager or manager.ttHooked then return end
-    manager.ttHooked = true
+    if not manager or hookedTables[manager] then return end
+    hookedTables[manager] = true
     local function Latest()
         C_Timer.After(0, function()
             local m = manager.GetOpenMenu and manager:GetOpenMenu()
-            if m then SkinMenu(m) end
+            if m and not InCombatLockdown() then SkinMenu(m) end      -- menus are short-lived: skip in combat
         end)
     end
     for _, fn in ipairs({ "OpenMenu", "OpenContextMenu" }) do
@@ -769,10 +809,12 @@ local function FlatCDMIcon(item)
         end
     end
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    local edge = CreateFrame("Frame", nil, item, "BackdropTemplate")
+    -- the 1px edge is a plain black texture 1px bigger than the icon, behind it.
+    -- (Not a backdrop: a backdrop recalculates in Lua whenever the size
+    -- changes, and these icons' sizes are secret in combat -> Lua error.)
+    local edge = item:CreateTexture(nil, "BACKGROUND", nil, -8)
     edge:SetPoint("TOPLEFT", icon, -1, 1); edge:SetPoint("BOTTOMRIGHT", icon, 1, -1)
-    edge:SetFrameLevel(math.max(0, item:GetFrameLevel() - 1))
-    TT.Flat(edge, { 0, 0, 0, 1 }, { 0, 0, 0, 1 })
+    edge:SetColorTexture(0, 0, 0, 1)
     if item.Cooldown and item.Cooldown.SetSwipeTexture then
         pcall(item.Cooldown.SetSwipeTexture, item.Cooldown, SQUARE)
     end
@@ -780,6 +822,7 @@ end
 local cdmPending = false
 local function FlatCDMAll()
     cdmPending = false
+    if Defer(FlatCDMAll, "cdm") then return end
     for _, n in ipairs(CDM_VIEWERS) do
         local v = _G[n]
         if v and v.itemFramePool then
@@ -808,6 +851,7 @@ end
 ---------------------------------------------------------------------------
 local function SkinWindow(w)
     if not M.db.windows[w[1]] then return end
+    if Defer(SkinWindow, w) then return end
     for _, name in ipairs(FrameNames(w)) do
         local frame = _G[name]
         if frame and not frame.ttSkinned then
