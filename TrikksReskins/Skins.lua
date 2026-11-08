@@ -833,7 +833,9 @@ end
 local cdmPending = false
 local function FlatCDMAll()
     cdmPending = false
-    if Defer(FlatCDMAll, "cdm") then return end
+    -- No combat wait here: flattening an icon is safe in combat (no protected
+    -- frames, no Lua maths on the secret sizes since the edge is a texture),
+    -- and icons that first appear mid-fight (procs like Riposte) need it then.
     for _, n in ipairs(CDM_VIEWERS) do
         local v = _G[n]
         if v and v.itemFramePool then
