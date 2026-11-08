@@ -69,6 +69,8 @@ local WINDOWS = {
     { "colour",    "Colour picker",         "ColorPickerFrame" },
     { "help",      "Help / support",        "HelpFrame" },
     { "mirror",    "Breath / fatigue timers", "MirrorTimerContainer" },
+    -- 1.1: chat tabs and edit box (the chat background stays yours to set)
+    { "chat",      "Chat (tabs, edit box)", "ChatFrame1" },
 }
 -- the bag windows: the combined bag and every separate one
 local BAGS = { "ContainerFrameCombinedBags" }
@@ -681,6 +683,77 @@ EXTRA.MirrorTimerContainer = function(f)
     end
     if type(f.SetupTimer) == "function" then hooksecurefunc(f, "SetupTimer", All) end
     All()
+end
+
+-- Chat: flat tabs (accent line under the selected one) and a flat edit box.
+-- The chat background itself stays Blizzard's: its colour and opacity are a
+-- setting in the chat window's own options. Our panels are separate child
+-- frames behind Blizzard's, so nothing is mixed into the chat frames: the edit
+-- box sends secure commands (/cast, ...) and stays free of addon code.
+local function FlatBehind(parent, l, t, r, b)
+    local bg = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    bg:SetPoint("TOPLEFT", l, t); bg:SetPoint("BOTTOMRIGHT", r, b)
+    bg:SetFrameLevel(math.max(0, parent:GetFrameLevel() - 1))
+    return bg
+end
+local chatSkinned = {}
+local function SkinChatFrame(name)
+    if chatSkinned[name] then return end
+    local cf = _G[name]
+    if not cf then return end
+    chatSkinned[name] = true
+
+    local tab = _G[name .. "Tab"]
+    if tab then
+        for _, k in ipairs({ "Left", "Middle", "Right", "ActiveLeft", "ActiveMiddle", "ActiveRight",
+                             "HighlightLeft", "HighlightMiddle", "HighlightRight" }) do
+            S.Kill(tab[k])
+        end
+        -- the tab's art only fills the bottom part of the 32px button
+        local bg = FlatBehind(tab, 2, -8, -2, 2)
+        TT.Flat(bg, C.panel, Border())
+        local bar = bg:CreateTexture(nil, "OVERLAY")
+        bar:SetPoint("BOTTOMLEFT", 1, 1); bar:SetPoint("BOTTOMRIGHT", -1, 1)
+        bar:SetHeight(2)
+        bar:SetColorTexture(unpack(Accent()))
+        bar:SetShown(tab.ActiveMiddle and tab.ActiveMiddle:IsShown() or false)
+        chatSkinned[tab] = bar
+        -- the "new message" glow: our accent colour instead of gold
+        if tab.glow then tab.glow:SetVertexColor(unpack(Accent())) end
+    end
+
+    local eb = cf.editBox or _G[name .. "EditBox"]
+    if eb then
+        for _, k in ipairs({ "Left", "Right", "Mid", "FocusLeft", "FocusRight", "FocusMid" }) do
+            S.Kill(_G[name .. "EditBox" .. k])
+        end
+        S.Kill(eb.focusLeft); S.Kill(eb.focusRight); S.Kill(eb.focusMid)
+        local bg = FlatBehind(eb, 2, -4, -2, 4)
+        TT.Flat(bg, { C.bg[1], C.bg[2], C.bg[3], 0.9 }, Border())
+        -- typing: accent edge, like a focused box elsewhere
+        eb:HookScript("OnEditFocusGained", function() bg:SetBackdropBorderColor(unpack(Accent())) end)
+        eb:HookScript("OnEditFocusLost", function() bg:SetBackdropBorderColor(unpack(Border())) end)
+    end
+end
+local function SkinAllChat()
+    if Defer(SkinAllChat, "chat") then return end
+    for _, name in ipairs(CHAT_FRAMES or {}) do SkinChatFrame(name) end
+    for i = 1, NUM_CHAT_WINDOWS or 10 do SkinChatFrame("ChatFrame" .. i) end
+end
+NOPANEL.ChatFrame1 = true
+EXTRA.ChatFrame1 = function()
+    SkinAllChat()
+    -- selected tab: Blizzard shows / hides its (now invisible) "active" art here
+    if type(FCFTab_UpdateColors) == "function" then
+        hooksecurefunc("FCFTab_UpdateColors", function(tab, selected)
+            local bar = chatSkinned[tab]
+            if bar then bar:SetShown(selected and true or false) end
+        end)
+    end
+    -- whisper / pet battle windows opened later
+    if type(FCF_OpenTemporaryWindow) == "function" then
+        hooksecurefunc("FCF_OpenTemporaryWindow", function() C_Timer.After(0, SkinAllChat) end)
+    end
 end
 
 EXTRA.InspectFrame = function()
