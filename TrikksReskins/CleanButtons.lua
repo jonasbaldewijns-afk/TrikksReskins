@@ -15,7 +15,7 @@ local M = TT:RegisterModule("CleanButtons", {
     category = "Reskin",
     addon = "TrikksReskins", svName = "TrikksReskinDB",
     desc = "Square, cropped action bar icons with a thin border instead of Blizzard's rounded bronze buttons.",
-    defaults = { crop = true, border = 1, hideArt = true, hideMacroText = false, hideHotkeys = false },
+    defaults = { crop = true, border = 1, hideArt = true, hideMacroText = false, hideHotkeys = false, shortNumpad = true },
 })
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 
@@ -47,6 +47,47 @@ local function FitCooldowns(btn, icon)
             cd:ClearAllPoints()
             cd:SetAllPoints(icon)
         end
+    end
+end
+
+-- Short numpad keybinds: "Num Pad 1" -> "N1", "SHIFT-NUMPAD1" -> "s-N1".
+-- Built from the binding itself (not Blizzard's text), so it doesn't depend on
+-- how the client spells "Num Pad". Other keys keep Blizzard's text.
+local NUMPAD = { PLUS = "+", MINUS = "-", MULTIPLY = "*", DIVIDE = "/", DECIMAL = "." }
+local MODS = { ALT = "a-", CTRL = "c-", SHIFT = "s-", META = "m-" }
+local function ShortKey(key)
+    if type(key) ~= "string" or not key:find("NUMPAD", 1, true) then return nil end
+    local prefix, rest = "", key
+    while true do                           -- "ALT-CTRL-NUMPAD1": peel the modifiers off the front
+        local mod, tail = rest:match("^(%u+)%-(.+)$")
+        if not (mod and MODS[mod]) then break end
+        prefix, rest = prefix .. MODS[mod], tail
+    end
+    local pad = rest:match("^NUMPAD(.+)$")
+    if not pad then return nil end
+    return prefix .. "N" .. (NUMPAD[pad] or pad)
+end
+
+-- which binding a button uses: action bars remember it (bindingAction),
+-- pet and stance buttons use fixed binding names
+local function BindingKey(btn, name)
+    local action = btn.bindingAction
+    if not action then
+        local id = btn:GetID()
+        if name:find("^PetActionButton") then action = "BONUSACTIONBUTTON" .. id
+        elseif name:find("^StanceButton") then action = "SHAPESHIFTBUTTON" .. id end
+    end
+    return (action and GetBindingKey(action)) or GetBindingKey("CLICK " .. name .. ":LeftButton")
+end
+
+-- put our short text on (or Blizzard's back when the option is off)
+local function ShortHotkey(btn, name, hotkey)
+    local short = M.enabled and M.db.shortNumpad and ShortKey(BindingKey(btn, name))
+    local want = short or btn.ttHotkeyOrig
+    if want and hotkey:GetText() ~= want then
+        btn.ttHotkeyBusy = true
+        hotkey:SetText(want)
+        btn.ttHotkeyBusy = false
     end
 end
 
@@ -82,6 +123,16 @@ local function StyleButton(btn, name)
         btn.ttBorder = CreateFrame("Frame", nil, btn, "BackdropTemplate")
         btn.ttBorder:SetAllPoints(icon)
         btn.ttBorder:SetFrameLevel(btn:GetFrameLevel() + 1)
+        -- 5) keybind text: Blizzard sets it whenever bindings change; we shorten
+        --    numpad keys right after (and remember Blizzard's text to put back)
+        local hk = btn.HotKey or _G[name .. "HotKey"]
+        if hk then
+            hooksecurefunc(hk, "SetText", function(_, text)
+                if btn.ttHotkeyBusy then return end
+                btn.ttHotkeyOrig = text
+                ShortHotkey(btn, name, hk)
+            end)
+        end
         -- Blizzard re-insets the cooldowns when the button art updates (e.g. bar
         -- size changed in Edit Mode): put ours back right after
         if type(btn.UpdateButtonArt) == "function" then
@@ -104,7 +155,11 @@ local function StyleButton(btn, name)
     local macro = btn.Name or _G[name .. "Name"]
     if macro then macro:SetAlpha(db.hideMacroText and 0 or 1) end
     local hotkey = btn.HotKey or _G[name .. "HotKey"]
-    if hotkey then hotkey:SetAlpha(db.hideHotkeys and 0 or 1) end
+    if hotkey then
+        hotkey:SetAlpha(db.hideHotkeys and 0 or 1)
+        if btn.ttHotkeyOrig == nil then btn.ttHotkeyOrig = hotkey:GetText() end
+        ShortHotkey(btn, name, hotkey)
+    end
 end
 
 -- Bronze bar art: end caps (gryphons), border art and background of the main bar.
@@ -137,6 +192,7 @@ ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")      -- stance buttons appear/change
 ev:RegisterEvent("PET_BAR_UPDATE")
+ev:RegisterEvent("UPDATE_BINDINGS")               -- keybinds changed: shorten the new numpad ones
 ev:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_ENABLED" and not pending then return end
     Apply()
@@ -171,10 +227,11 @@ function M:BuildSettings(body, page)
     Check("Hide bar art (end caps / bronze border of the main bar)", "hideArt", -30)
     Check("Hide macro names", "hideMacroText", -56)
     Check("Hide keybind text", "hideHotkeys", -82)
+    Check("Short numpad keybinds: N1, N2, s-N3 ... (instead of Num Pad 1)", "shortNumpad", -108)
 
     local border = TT.Stepper(body, "Border thickness (px)", function() return db.border end,
         function(v) db.border = v; Apply() end, 0, 3, 1)
-    border:SetPoint("TOPLEFT", 0, -112)
+    border:SetPoint("TOPLEFT", 0, -138)
 
     local help = TT.Label(body,
         "Changes apply right away (or right after combat, since action buttons\n" ..

@@ -1,5 +1,10 @@
 # Trikks Reskins
 
+## Unreleased
+
+### Changes
+- **Clean Action Buttons**: numpad keybinds are shortened on the buttons: `N1`, `N2`, `s-N3` instead of `Num Pad 1`. On by default, with its own checkbox.
+
 ## 1.1
 
 ### Newly skinned
