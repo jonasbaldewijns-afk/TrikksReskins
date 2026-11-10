@@ -196,10 +196,18 @@ local function IsBackground(lower)
     for _, k in ipairs(KEEP) do if lower:find(k, 1, true) then return false end end
     return true
 end
+-- The answer per atlas name is worked out once and kept: windows are walked
+-- again and again (every scroll of a list), and the same few names come back.
+local chromeCache = {}
 local function IsChrome(atlas)
     if not atlas or atlas == "" or TT.IsSecret(atlas) then return false end
-    for _, pat in ipairs(CHROME) do if atlas:find(pat) then return true end end
-    return IsBackground(atlas:lower())
+    local known = chromeCache[atlas]
+    if known ~= nil then return known end
+    local chrome = false
+    for _, pat in ipairs(CHROME) do if atlas:find(pat) then chrome = true; break end end
+    if not chrome then chrome = IsBackground(atlas:lower()) end
+    chromeCache[atlas] = chrome
+    return chrome
 end
 
 -- Dark text was made for parchment; on our dark panels it is unreadable.
@@ -224,51 +232,74 @@ function S.LightText(fs)
 end
 
 -- Walk a window and everything inside it; hide chrome, tint the selected side tab.
-function S.Deep(frame, depth)
-    depth = depth or 0
-    if depth == 0 and Defer(S.Deep, frame) then return end
-    if depth > 10 or (frame.IsForbidden and frame:IsForbidden()) then return end
-    for _, r in ipairs({ frame:GetRegions() }) do
-        if r:IsObjectType("Texture") and r.GetAtlas then
-            local atlas = r:GetAtlas()
-            if TT.IsSecret(atlas) then atlas = nil end
-            if (not atlas or atlas == "") and not r.ttTinted and S.IsMinusPlus(r) then
+--
+-- This runs a lot: on every open, tab change and every scroll of a list. So:
+--   * a frame's parts are read straight from the call (select) instead of
+--     being put in a new table per frame, which the game then has to clean up
+--   * a texture whose atlas is the same as at the last walk is skipped: every
+--     rule below does its work once per texture + atlas. (List rows are
+--     re-used for other content: then the atlas changes and it is looked at
+--     again.) Textures without an atlas are always checked: their file can
+--     change without us seeing it.
+local seenAtlas = setmetatable({}, { __mode = "k" })     -- texture -> atlas at the last walk
+local function DeepRegion(frame, r)
+    if r:IsObjectType("Texture") and r.GetAtlas then
+        local atlas = r:GetAtlas()
+        if TT.IsSecret(atlas) or atlas == "" then atlas = nil end
+        if atlas then
+            if seenAtlas[r] == atlas then return end
+            seenAtlas[r] = atlas
+        end
+        if not atlas then
+            if not r.ttTinted and S.IsMinusPlus(r) then
                 -- red square with a gold sign -> grey (stays grey when Blizzard swaps - and +)
                 r.ttTinted = true
                 r:SetDesaturated(true)
                 r:SetVertexColor(0.85, 0.85, 0.88)
-            elseif atlas == "common-sidetab-selected" then
-                if not r.ttTinted then
-                    r.ttTinted = true
-                    local a = Accent()
-                    r:SetDesaturated(true)
-                    r:SetVertexColor(a[1], a[2], a[3], 0.8)
-                end
-            elseif atlas and (atlas:find("Options_ListExpand") or atlas == "common-button-list-collapseExpand") then
-                S.Kill(r)               -- the brown/gold header plate of collapsible lists
-                S.Header(frame)
-            elseif atlas == "common-button-list-minus" or atlas == "common-button-list-plus" then
-                if not r.ttTinted then  -- the +/- on those headers: light grey instead of gold
-                    r.ttTinted = true
-                    r:SetDesaturated(true)
-                    r:SetVertexColor(0.75, 0.75, 0.78)
-                end
-            elseif atlas == "checkbox-minimal" and frame:IsObjectType("CheckButton") then
-                S.Check(frame)
-            elseif atlas == "common-stat-bar-BG" then
-                S.StatBar(frame, r)
-            elseif atlas and atlas:find("^!?minimal%-scrollbar%-") then
-                S.ScrollPart(frame, r, atlas)
-            elseif IsChrome(atlas) then
-                S.Kill(r)
             end
-        elseif r:IsObjectType("FontString") then
-            S.LightText(r)
+        elseif atlas == "common-sidetab-selected" then
+            if not r.ttTinted then
+                r.ttTinted = true
+                local a = Accent()
+                r:SetDesaturated(true)
+                r:SetVertexColor(a[1], a[2], a[3], 0.8)
+            end
+        elseif atlas:find("Options_ListExpand") or atlas == "common-button-list-collapseExpand" then
+            S.Kill(r)               -- the brown/gold header plate of collapsible lists
+            S.Header(frame)
+        elseif atlas == "common-button-list-minus" or atlas == "common-button-list-plus" then
+            if not r.ttTinted then  -- the +/- on those headers: light grey instead of gold
+                r.ttTinted = true
+                r:SetDesaturated(true)
+                r:SetVertexColor(0.75, 0.75, 0.78)
+            end
+        elseif atlas == "checkbox-minimal" and frame:IsObjectType("CheckButton") then
+            S.Check(frame)
+        elseif atlas == "common-stat-bar-BG" then
+            S.StatBar(frame, r)
+        elseif atlas:find("^!?minimal%-scrollbar%-") then
+            S.ScrollPart(frame, r, atlas)
+        elseif IsChrome(atlas) then
+            S.Kill(r)
         end
+    elseif r:IsObjectType("FontString") then
+        S.LightText(r)
     end
+end
+local function DeepRegions(frame, ...)
+    for i = 1, select("#", ...) do DeepRegion(frame, (select(i, ...))) end
+end
+local function DeepChildren(depth, ...)
+    for i = 1, select("#", ...) do S.Deep((select(i, ...)), depth) end
+end
+function S.Deep(frame, depth)
+    depth = depth or 0
+    if depth == 0 and Defer(S.Deep, frame) then return end
+    if depth > 10 or (frame.IsForbidden and frame:IsForbidden()) then return end
+    DeepRegions(frame, frame:GetRegions())
     if frame:IsObjectType("StatusBar") then S.StatusBar(frame) end
     S.WatchScrollBox(frame)
-    for _, child in ipairs({ frame:GetChildren() }) do S.Deep(child, depth + 1) end
+    DeepChildren(depth + 1, frame:GetChildren())
 end
 
 -- Lists (reputation, skills, currencies, recipes, ...) live in a ScrollBox that
@@ -481,16 +512,21 @@ local function IsArtButton(b)
 end
 
 -- walk a window's children and restyle Blizzard buttons in it
+-- (children read straight from the call, no table per frame; see S.Deep)
+local function ButtonsChildren(depth, ...)
+    for i = 1, select("#", ...) do
+        local child = select(i, ...)
+        if not (child.IsForbidden and child:IsForbidden()) then
+            if not child.ttSkinned and IsArtButton(child) then S.Button(child) end   -- done ones: skipped at once
+            S.ButtonsIn(child, depth + 1)
+        end
+    end
+end
 function S.ButtonsIn(frame, depth)
     depth = depth or 0
     if depth == 0 and Defer(S.ButtonsIn, frame) then return end
     if depth > 5 or not M.db.buttons then return end
-    for _, child in ipairs({ frame:GetChildren() }) do
-        if not (child.IsForbidden and child:IsForbidden()) then
-            if IsArtButton(child) then S.Button(child) end
-            S.ButtonsIn(child, depth + 1)
-        end
-    end
+    ButtonsChildren(depth, frame:GetChildren())
 end
 
 -- inset boxes inside windows

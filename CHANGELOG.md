@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Performance
+- **Skins**: scrolling long lists (auction house, reputation, quest log) is lighter. Parts that were already skinned are skipped, and a walk through a window no longer creates a pile of temporary data.
+
 ### Changes
 - **Clean Action Buttons**: numpad keybinds are shortened on the buttons: `N1`, `N2`, `s-N3` instead of `Num Pad 1`. On by default, with its own checkbox.
 
