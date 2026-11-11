@@ -2,6 +2,9 @@
 
 ## 1.2
 
+### Newly skinned
+- **Looking For Group**: the window with its three pages (create listing, group browser, who list), its side tabs and the big category buttons. Own checkbox in `/trikks` → Skins.
+
 ### Changes
 - **Clean Action Buttons**: numpad keybinds are shortened on the buttons: `N1`, `N2`, `s-N3` instead of `Num Pad 1`. On by default, with its own checkbox.
 

@@ -74,6 +74,8 @@ local WINDOWS = {
     { "xpbar",     "XP / reputation bars",  "StatusTrackingBarManager" },
     { "tracker",   "Quest tracker",         "ObjectiveTrackerFrame" },
     { "worldmap",  "World map + quest log", "WorldMapFrame" },
+    -- 1.2
+    { "lfg",       "Looking for group",     "LFGParentFrame" },
 }
 -- the bag windows: the combined bag and every separate one
 local BAGS = { "ContainerFrameCombinedBags" }
@@ -279,6 +281,8 @@ local function DeepRegion(frame, r)
             S.StatBar(frame, r)
         elseif atlas:find("^!?minimal%-scrollbar%-") then
             S.ScrollPart(frame, r, atlas)
+        elseif atlas == "groupfinder-button-cover" then
+            S.GroupButton(frame)    -- the big picture buttons in Looking For Group
         elseif IsChrome(atlas) then
             S.Kill(r)
         end
@@ -1122,6 +1126,47 @@ EXTRA.WorldMapFrame = function(f)
     end
     if q.SetDisplayMode then hooksecurefunc(q, "SetDisplayMode", Later) end
     Later()
+end
+
+-- Looking For Group (Forever: "LFGParentFrame"). The window is an empty holder
+-- with three full pages inside (create listing, browse, who list), each a
+-- complete window of its own with border, background and title: every page is
+-- skinned as a window. The holder only has the close button, the round "eye"
+-- in the corner and the side tabs.
+function S.GroupButton(btn)
+    -- "Dungeons", "Quests & Zones", ...: a painted picture under an ornate bronze
+    -- cover. The cover goes; the picture stays (a bit darker, so the label stays
+    -- readable) inside a 1px edge that lights up on hover.
+    if extraSkinned[btn] then return end
+    extraSkinned[btn] = true
+    S.Kill(btn.Cover)
+    for _, r in ipairs({ btn:GetRegions() }) do
+        if r:IsObjectType("Texture") and r ~= btn.Cover then
+            local a = r.GetAtlas and r:GetAtlas()
+            if a and not TT.IsSecret(a) and a == "groupfinder-button-cover-down" then S.Kill(r) end
+        end
+    end
+    if btn.Icon and btn.Icon.SetVertexColor then btn.Icon:SetVertexColor(0.65, 0.65, 0.65) end
+    local hl = btn.HighlightTexture or (btn.GetHighlightTexture and btn:GetHighlightTexture())
+    if hl then hl:SetColorTexture(1, 1, 1, 0.07) end
+    -- the edge: a see-through child frame on top (it takes no clicks)
+    local edge = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+    edge:SetAllPoints()
+    TT.Flat(edge, { 0, 0, 0, 0 }, Border())
+    if btn.HookScript then
+        btn:HookScript("OnEnter", function() edge:SetBackdropBorderColor(unpack(Accent())) end)
+        btn:HookScript("OnLeave", function() edge:SetBackdropBorderColor(unpack(Border())) end)
+    end
+end
+NOPANEL.LFGParentFrame = true
+EXTRA.LFGParentFrame = function(f)
+    for _, n in ipairs({ "LFGListingFrame", "LFGBrowseFrame", "LFGWhoListFrame" }) do
+        local page = _G[n]
+        if page then S.Window(page) end
+    end
+    S.Close(f.CloseButton or _G.LFGParentFrameCloseButton)
+    S.Kill(_G.LFGParentFramePortrait)        -- the eye in the corner (like the portraits elsewhere)
+    S.Deep(f)                                -- the side tabs
 end
 
 EXTRA.InspectFrame = function()
