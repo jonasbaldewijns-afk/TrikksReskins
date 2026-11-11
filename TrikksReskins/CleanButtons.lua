@@ -198,12 +198,11 @@ ev:SetScript("OnEvent", function(_, event)
     Apply()
 end)
 
-StaticPopupDialogs["TRIKKSTWEAKS_RELOAD"] = StaticPopupDialogs["TRIKKSTWEAKS_RELOAD"] or {
-    text = "%s\n\nReload your UI now?",
-    button1 = RELOADUI or "Reload", button2 = LATER or "Later",
-    OnAccept = function() C_UI.Reload() end,
-    timeout = 0, whileDead = true, hideOnEscape = true,
-}
+-- "... Reload your UI now?": Trikks Tweaks' own pop-up (an older Trikks Tweaks
+-- doesn't have it yet: then just say it in chat)
+local function AskReload(text)
+    if TT.AskReload then TT.AskReload(text) else TT.Print(text .. " /reload to apply.") end
+end
 
 local loggedIn = false
 function M:OnEnable()
@@ -211,7 +210,7 @@ function M:OnEnable()
 end
 function M:OnDisable()
     -- Masks and textures we removed can't be put back reliably: reload.
-    StaticPopup_Show("TRIKKSTWEAKS_RELOAD", "Clean Action Buttons turned off.")
+    AskReload("Clean Action Buttons turned off.")
 end
 ev:HookScript("OnEvent", function(_, event) if event == "PLAYER_ENTERING_WORLD" then loggedIn = true end end)
 

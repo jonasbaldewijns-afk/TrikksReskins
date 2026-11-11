@@ -1379,16 +1379,15 @@ ev:SetScript("OnEvent", function(_, event, addon)
     end
 end)
 
-StaticPopupDialogs["TRIKKSTWEAKS_RELOAD"] = StaticPopupDialogs["TRIKKSTWEAKS_RELOAD"] or {
-    text = "%s\n\nReload your UI now?",
-    button1 = RELOADUI or "Reload", button2 = LATER or "Later",
-    OnAccept = function() C_UI.Reload() end,
-    timeout = 0, whileDead = true, hideOnEscape = true,
-}
+-- "... Reload your UI now?": Trikks Tweaks' own pop-up (an older Trikks Tweaks
+-- doesn't have it yet: then just say it in chat)
+local function AskReload(text)
+    if TT.AskReload then TT.AskReload(text) else TT.Print(text .. " /reload to apply.") end
+end
 
 function M:OnEnable() if IsLoggedIn() then ApplyAll() end end
 function M:OnDisable()
-    StaticPopup_Show("TRIKKSTWEAKS_RELOAD", "Skins turned off. A reload brings Blizzard's look back.")
+    AskReload("Skins turned off. A reload brings Blizzard's look back.")
 end
 
 function M:BuildSettings(body, page)
